@@ -1,0 +1,25 @@
+# phaidana/pyproject.toml
+
+# Defines the build system used (setuptools is the standard for this)
+[build-system]
+requires = ["setuptools>=61.0.0"]
+build-backend = "setuptools.build_meta"
+
+# Metadata for your project
+[project]
+name = "phaidana" # Use your project's name here
+version = "0.1.0"
+description = "Analysis package for physics data"
+readme = "README.md"
+
+# List your dependencies here (e.g., numpy, pandas, scipy)
+dependencies = [
+    "numpy",
+    "scipy",
+    "pandas", 
+    "matplotlib"
+]
+
+# CRITICAL FOR SRC-LAYOUT:
+[tool.setuptools.packages.find]
+where = ["src"]
