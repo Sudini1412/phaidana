@@ -13,5 +13,18 @@ for i,event in enumerate(mreader):
     if len(wfs)==0:
         pass
     else:
-        plt.plot(wfs[0])
-        plt.show()
+        if event.midas_event == 12690:
+            print("Name ",event.name)
+            print("NBoard ",event.nboards)
+            print("NChannels ",event.nchannels)
+            print("Midas Event ",event.midas_event)
+            print("Event Counter ",event.event_counter)
+
+            plt.plot(wfs[0])
+            plt.title(f"{event.midas_event}")
+            plt.show()
+        else:
+            pass
+
+        # plt.plot(wfs[0])
+        # plt.show()
