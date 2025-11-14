@@ -1,3 +1,4 @@
+import numpy as np 
 import phaidana.parser.pyreader.VX274X_unpacker as unpack
 import matplotlib.pyplot as plt
 
@@ -13,7 +14,7 @@ for i,event in enumerate(mreader):
     if len(wfs)==0:
         pass
     else:
-        if event.midas_event == 12690:
+        if np.max(wfs[0]) > 55000:
             print("Name ",event.name)
             print("NBoard ",event.nboards)
             print("NChannels ",event.nchannels)
@@ -25,6 +26,3 @@ for i,event in enumerate(mreader):
             plt.show()
         else:
             pass
-
-        # plt.plot(wfs[0])
-        # plt.show()
