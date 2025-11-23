@@ -32,7 +32,7 @@ class PulseConfig:
     valley_rel_fraction: float = 0.3
 
 class State(Enum):
-    IDLE = auto()
+    STANDBY = auto()
     RISING = auto()
     FALLING = auto()
 
@@ -169,19 +169,19 @@ class PulseFinder:
         Main entry point. Returns found pulses and the filtered trace used for logic.
         """
         wf_raw = np.asarray(waveform, dtype=float)
-        #wf_filt = self._smooth_waveform(wf_raw)
-        wf_filt = wf_raw
+        wf_filt = self._smooth_waveform(wf_raw)
+
         n = len(wf_raw)
         
         pulses: List[PulseResult] = []
         candidate: Optional[PulseCandidate] = None
-        state = State.IDLE
+        state = State.STANDBY
         
         i = 0
         while i < n:
             val = wf_filt[i]
 
-            if state == State.IDLE:
+            if state == State.STANDBY:
                 if val > self.cfg.high_threshold:
                     # 1. Check previous pulse constraint
                     last_end = pulses[-1].t_end if pulses else -999
@@ -233,7 +233,7 @@ class PulseFinder:
                 if val < self.cfg.low_threshold and i > candidate.peak_idx + self.cfg.min_after_peak:
                     pulses.append(candidate.finalize(i, wf_raw))
                     candidate = None
-                    state = State.IDLE
+                    state = State.STANDBY
 
             i += 1
 
