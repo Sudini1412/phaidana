@@ -29,23 +29,25 @@ for i,event in enumerate(mreader):
 
             # Run Finder
             config = pf.PulseConfig(high_threshold  = 200.0, 
-                                    low_threshold = 100.0,
-                                    avg_gate = 5,
-                                    min_gap_samples = 10,
+                                    low_threshold = 50.0,
+                                    avg_gate = 10,
+                                    min_gap_samples = 100,
                                     min_after_peak = 100,
                                     valley_depth_threshold = 2.0,
                                     valley_rel_fraction = 0.2)
             finder = pf.PulseFinder(config)
-            pulses,  filtered_trace = finder.process(wfs[0])
+            pulses,  filtered_trace = finder.process(wfs_sub[0])
 
-            print(pulses)
             first_pulse = pulses[0]
             start = first_pulse.t_start
             end = first_pulse.t_end
-            print(start)
+            print(len(pulses))
             plt.plot(wfs_sub[0],color='k')
-            plt.plot(filtered_trace,color='b')
-            plt.axvline(x=start, color='r')
-            plt.axvline(x=end, color='r')
+            plt.plot(filtered_trace,color='g')
+            plt.axvline(x=start, color='r',linestyle='--')
+            plt.axvline(x=end, color='r', linestyle='--')
+            plt.title("Photoelectron signal")
+            plt.xlabel("Time (samples)")
+            plt.ylabel("Amplitude (ADC)")
             plt.show()           
 
