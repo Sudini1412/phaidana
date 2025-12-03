@@ -14,7 +14,7 @@ def visualize_event(waveform, filtered_trace, pulses, config, event_id, channel_
     """
     Plots the raw signal, filtered trace, thresholds, and detected pulses.
     """
-    plt.figure(figsize=(10, 5))
+    plt.figure(figsize=(12, 6))
     
     # 1. Plot Traces
     plt.plot(waveform, color='k', alpha=0.5, label='Raw Signal')
@@ -40,7 +40,7 @@ def visualize_event(waveform, filtered_trace, pulses, config, event_id, channel_
     plt.title(f"Event {event_id} | Channel {channel_id} | Found {len(pulses)} pulses")
     plt.xlabel("Time (Samples)")
     plt.ylabel("Amplitude (ADC)")
-    plt.legend(loc='upper left')
+    plt.legend(loc='upper right')
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
 
@@ -56,12 +56,15 @@ filter = Filter()
 dir = "/bundle/data/DarkSide/phaidaq/run01915"
 count = 0
 pulse_rows = []
-dig_sampling = 125*(10**6)
 mreader= unpack.MIDASreader(dir)
+main_events = [8,12,15,21,29]
+
 
 print("Starting event loop...")
 for i,event in enumerate(mreader):
     nevent = i
+    ch_idx = 0
+    
     event_channels = event.nchannels
     # print(f'Event # {i}\t#Modules {event.nboards}\t#Channels {event.nchannels}\t#Samples {event.nsamples}')
     # print(f'\tchannel mask {bin(event.channel_mask)[2:]}\ttrigger time: {event.trigger_time}')
@@ -72,67 +75,7 @@ for i,event in enumerate(mreader):
     bal_rms = np.sqrt(np.mean(bal**2))
     bal_std = np.std(bal)
 
-
-
-    # Checks for empty events
-    if len(wfs)==0:
-        continue
-
-    if (np.max(wfs[0]) > 55000) or (len(filter.pulse_in_pretrig(wfs_sub ,gate=250, start=0))>0):
-        pass
-    else:
-        # Run Finder
-        config = pf.PulseConfig(high_threshold  = 200.0, 
-                                low_threshold = 0.0,
-                                avg_gate = 10,
-                                min_gap_samples = 50,
-                                min_after_peak = 50,
-                                valley_depth_threshold = 5.0,
-                                valley_rel_fraction = 0.5,
-                                fprompt = 80)
-        finder = pf.PulseFinder(config)
-
-        channel_idx = 0
-        pulses,  filtered_trace = finder.process(wfs_sub[channel_idx])
-
-        pulse_tot = 0
-    
-        if len(pulses) >0:
-            count += 1
-            if count % 5000 == 0:
-                print(f"Pulses found: {count}")
-            
-            # --- CALL PLOT FUNCTION ---
-            # Logic: Only plot the first 5 found pulses to check quality, then stop plotting
-            if count <= 60:
-                print(f"Plotting Event {nevent}...")
-                visualize_event(
-                    waveform=wfs_sub[channel_idx],
-                    filtered_trace=filtered_trace,
-                    pulses=pulses,
-                    config=config,
-                    event_id=nevent,
-                    channel_id=channel_idx
-                    # save_path=f"./debug_plot_{nevent}.png" # Uncomment to save instead of show
-                )
-
-            for p in pulses:
-                row = asdict(p)
-                row['event_number'] = nevent
-                row['channel'] = channel_idx
-                pulse_rows.append(row)
-            
-
-
-
-print("Final pulse count: ", count)
-
-print("Creating DataFrame...")
-pulse_df = pd.DataFrame(pulse_rows)
-cols = ['event_number', 'channel'] + [c for c in pulse_df.columns if c not in ['event_number', 'channel']]
-pulse_df = pulse_df[cols]
-print(pulse_df)
-
-output_path = '/user/sudini/Developer/Data_phaidana/df_1915_Co60_data.csv'
-pulse_df.to_csv(output_path, index=False)
-
+    if nevent in main_events:
+        plt.plot(wfs_sub[ch_idx])
+        plt.title(f'Plotting event {nevent}')
+        plt.show()

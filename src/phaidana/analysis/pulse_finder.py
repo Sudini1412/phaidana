@@ -16,6 +16,7 @@ class PulseResult:
     peak_index: int
     peak_amplitude: float
     integral: float
+    prompt_fraction: float
 
 @dataclass
 class PulseConfig:
@@ -30,6 +31,7 @@ class PulseConfig:
     min_after_peak: int = 3
     valley_depth_threshold: float = 2.0
     valley_rel_fraction: float = 0.3
+    fprompt: int = 80
 
 class State(Enum):
     STANDBY = auto()
@@ -66,28 +68,32 @@ class PulseCandidate:
             self.valley_val = val
             self.valley_idx = idx
 
-    def finalize(self, end_idx: int, raw_waveform: np.ndarray) -> PulseResult:
+    def finalize(self, end_idx: int, raw_waveform: np.ndarray, fprompt: int) -> PulseResult:
         """Freezes the candidate into a final result object."""
         # Ensure indices are within bounds
         safe_end = min(end_idx, len(raw_waveform) - 1)
         safe_start = max(0, self.start_idx)
         
+        #segment = raw_waveform[safe_start : safe_end + 1]
         segment = raw_waveform[safe_start : safe_end + 1]
         
         # If segment is empty (edge case), handle gracefully
         if segment.size == 0:
             peak_amp = 0.0
             integral = 0.0
+            prompt_fraction = 0.0
         else:
             peak_amp = np.max(segment)
             integral = np.sum(segment)
+            prompt_fraction = float(np.sum(segment[:fprompt]))/float(integral)
 
         return PulseResult(
             t_start=safe_start,
             t_end=safe_end,
             peak_index=self.peak_idx,
             peak_amplitude=peak_amp,
-            integral=integral
+            integral=integral,
+            prompt_fraction=prompt_fraction
         )
 
 # ---------------------------------------------------------------------------
@@ -218,7 +224,7 @@ class PulseFinder:
                     split_idx = self._refine_split_point(wf_filt, candidate.peak_idx, i, candidate.valley_idx)
                     
                     # A. Close the FIRST pulse
-                    pulses.append(candidate.finalize(split_idx - 1, wf_raw))
+                    pulses.append(candidate.finalize(split_idx - 1, wf_raw, self.cfg.fprompt))
                     
                     # B. Start the SECOND pulse (immediately at split_idx)
                     candidate = PulseCandidate(split_idx, val)
@@ -231,7 +237,7 @@ class PulseFinder:
                 # --- Check Closure (End Logic) ---
                 # Must drop below low_threshold AND satisfy minimum width requirement
                 if val < self.cfg.low_threshold and i > candidate.peak_idx + self.cfg.min_after_peak:
-                    pulses.append(candidate.finalize(i, wf_raw))
+                    pulses.append(candidate.finalize(i, wf_raw, self.cfg.fprompt))
                     candidate = None
                     state = State.STANDBY
 
@@ -239,7 +245,7 @@ class PulseFinder:
 
         # Handle active pulse at end of file
         if candidate is not None:
-            pulses.append(candidate.finalize(n - 1, wf_raw))
+            pulses.append(candidate.finalize(n - 1, wf_raw, self.cfg.fprompt))
 
         return pulses, wf_filt
 
