@@ -56,7 +56,8 @@ filter = Filter()
 dir = "/bundle/data/DarkSide/phaidaq/run01915"
 count = 0
 pulse_rows = []
-dig_sampling = 125*(10**6)
+dig_sample_rate = 125*(10**6)
+ADC2V = float(4 / 2**16)
 mreader= unpack.MIDASreader(dir)
 
 print("Starting event loop...")
@@ -71,6 +72,8 @@ for i,event in enumerate(mreader):
     wfs_sub = wfs - bal
     bal_rms = np.sqrt(np.mean(bal**2))
     bal_std = np.std(bal)
+    wfs_sub = wfs_sub * ADC2V
+    print(wfs_sub)
 
 
 
@@ -78,9 +81,11 @@ for i,event in enumerate(mreader):
     if len(wfs)==0:
         continue
 
-    if (np.max(wfs[0]) > 55000) or (len(filter.pulse_in_pretrig(wfs_sub ,gate=250, start=0))>0):
+    if (np.max(wfs[0]) > 55000 * ADC2V) or (len(filter.pulse_in_pretrig(wfs_sub ,gate=250, start=0))>0):
         pass
     else:
+        time = np.arange(1,len(wfs[0])+1) * dig_sample_rate
+        wfs_sub = wfs_sub * ADC2V
         # Run Finder
         config = pf.PulseConfig(high_threshold  = 200.0, 
                                 low_threshold = 0.0,
