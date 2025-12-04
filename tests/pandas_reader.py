@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
+
 
 # Use the same path you defined in reader.py
 file_path_source = '/user/sudini/Developer/Data_phaidana/df_1915_Co60_data.csv'
@@ -39,7 +39,7 @@ plt.show()
 plt.scatter(subset_source['peak_index'].to_numpy(),subset_source['peak_amplitude'].to_numpy(), s=1, color='k')
 plt.show()
 
-plt.hist2d(subset_source['integral'].to_numpy(),subset_source['prompt_fraction'].to_numpy(), bins=400, cmin = 1, range = ([0,1e7],[0,1]), norm=LogNorm())
+plt.hist2d(subset_source['integral'].to_numpy(),subset_source['prompt_fraction'].to_numpy(), bins=400, cmin = 1, range = ([0,1e7],[0,1]))
 plt.colorbar()
 plt.show()
 # --- Retrieve Events in Range ---
