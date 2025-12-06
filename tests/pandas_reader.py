@@ -11,6 +11,7 @@ file_path_source = '/user/sudini/Developer/Data_phaidana/df_1915_Co60_data.csv'
 #file_path_background = '/user/sudini/Developer/df_1915_Co60_50ppmDope_data.csv'
 
 source_df = pd.read_csv(file_path_source)
+print(source_df)
 #background_df = pd.read_csv(file_path_background)
 
 target_channel = 0 
@@ -24,7 +25,7 @@ plt.figure(figsize=(10, 6))
 
 # 'bins' determines the resolution. Increase it for finer detail.
 # 'log=True' helps see small features if you have a large range of counts.
-plt.hist(subset_source['integral'], bins=300, range =(0,5000000), histtype='step', color='black', alpha=0.7, log=False, label=f'Source Channel {target_channel}')
+plt.hist(subset_source['integral'], bins=300, histtype='step', color='black', alpha=0.7, log=False, label=f'Source Channel {target_channel}')
 #plt.hist(subset_background['integral'], bins=300, range =(0,5000000), histtype='step', color='r', alpha=0.7, log=False, label=f'Background Channel {target_channel}')
 
 plt.title(f"Pulse Integral Spectrum - Channel {target_channel}")
@@ -34,13 +35,16 @@ plt.legend()
 plt.grid(True, which="both", alpha=0.3)
 plt.tight_layout()
 
+#plt.savefig('/user/sudini/Developer/Plots/charge_spectrum.png')
 plt.show()
 
 plt.scatter(subset_source['peak_index'].to_numpy(),subset_source['peak_amplitude'].to_numpy(), s=1, color='k')
+#plt.savefig('/user/sudini/Developer/Plots/amps.png')
 plt.show()
 
-plt.hist2d(subset_source['integral'].to_numpy(),subset_source['prompt_fraction'].to_numpy(), bins=400, cmin = 1, range = ([0,1e7],[0,1]))
+plt.hist2d(subset_source['integral'].to_numpy(),subset_source['prompt_fraction'].to_numpy(), bins=250, cmin = 1)
 plt.colorbar()
+#plt.savefig('/user/sudini/Developer/Plots/prompt_fraction.png')
 plt.show()
 # --- Retrieve Events in Range ---
 

@@ -74,8 +74,8 @@ class PulseCandidate:
         safe_end = min(end_idx, len(raw_waveform) - 1)
         safe_start = max(0, self.start_idx)
         
-        #segment = raw_waveform[safe_start : safe_end + 1]
-        segment = raw_waveform[safe_start : safe_end + 1]
+        
+        segment = raw_waveform[safe_start : safe_end +1]
         
         # If segment is empty (edge case), handle gracefully
         if segment.size == 0:

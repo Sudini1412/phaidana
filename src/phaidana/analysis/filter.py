@@ -12,12 +12,12 @@ class Filter:
         return  uniform_filter1d(wfs, size=gate)
     
     # substract mean baseline inside the daq
-    def pulse_in_pretrig(self,wfs,gate=250, start=0):
+    def pulse_in_pretrig(self,wfs, threshold, gate=250, start=0):
         peaks = []
         wf_cut= wfs[:,start:start+gate]
 
         for wf in wf_cut:
-            p, _ = find_peaks(wf, height=200)
+            p, _ = find_peaks(wf, height=threshold)
             peaks.append(p)
         peaks = np.array(peaks, dtype=object)
         peaks = peaks.flatten()
