@@ -244,8 +244,8 @@ class PulseFinder:
             i += 1
 
         # Handle active pulse at end of file
-        if candidate is not None:
-            pulses.append(candidate.finalize(n - 1, wf_raw, self.cfg.fprompt))
+        # if candidate is not None:
+        #     pulses.append(candidate.finalize(n - 1, wf_raw, self.cfg.fprompt))
 
         return pulses, wf_filt
 
