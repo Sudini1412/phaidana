@@ -53,8 +53,8 @@ def visualize_event(waveform, filtered_trace, pulses, config, event_id, channel_
 
 # --- MAIN SCRIPT --- #
 filter = Filter()
-dir = "/bundle/data/DarkSide/phaidaq/run01906"
-file_path_source = '/user/sudini/Developer/Data_phaidana/df_1906_Co60_data.csv'
+dir = "/bundle/data/DarkSide/phaidaq/run01915"
+file_path_source = '/user/sudini/Developer/Data_phaidana/df_1915_t0_Co60_data.csv'
 
 source_df = pd.read_csv(file_path_source)
 target_channel = 0 
@@ -63,9 +63,9 @@ subset_source = source_df[source_df['channel'] == target_channel]
 plt.hist(subset_source['tau2'].to_numpy(),bins=200, range=(0,3))
 plt.show()
 # Define the range of integrals you are interested in (e.g., based on the plot)
-min_integral = 50 
-max_integral = 250
-min_fprompt = 0.02
+min_integral = 40 
+max_integral = 120
+min_fprompt = 0.06
 max_fprompt = 0.14
 # Apply the filter
 # We use & for "AND", and enclose conditions in parentheses ()
@@ -108,12 +108,20 @@ if not events_in_range.empty:
         # print(f'\tchannel mask {bin(event.channel_mask)[2:]}\ttrigger time: {event.trigger_time}')
         # access waveforms in event
         wfs = event.adc_data # shape = (number of channels, number of waveform sample)
-        bal = filter.get_baseline(wfs, gate=250, start=0)
+        bal = filter.get_baseline(wfs, gate=250, start=0) 
         wfs_sub = wfs - bal
         bal_rms = np.sqrt(np.mean(bal**2))
         bal_std = np.std(bal)
-
-        if nevent in main_events:
+        
+        np.set_printoptions(threshold=sys.maxsize)
+        
+        if nevent == 389458:
+            print(wfs_sub[ch_idx])
             plt.plot(wfs_sub[ch_idx])
-            plt.title(f'Plotting event {nevent}')
+            plt.title(f'Plotting event {event}')
             plt.show()
+
+        # if nevent in main_events:
+        #     plt.plot(wfs_sub[ch_idx])
+        #     plt.title(f'Plotting event {nevent}')
+        #     plt.show()

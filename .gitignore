@@ -207,4 +207,6 @@ marimo/_lsp/
 __marimo__/
 
 #Config
-config/
+config/*
+!config/config.example.json
+!config/config.json

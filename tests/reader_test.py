@@ -121,8 +121,23 @@ def main(config: dict):
         wfs = event.adc_data
         
         # Baseline subtraction & Calibration
+        #baseline = signal_filter.get_baseline(wfs, gate=config['baseline_gate'], start=0)
+        # This prevents the pulse from influencing the baseline value
         baseline = signal_filter.get_baseline(wfs, gate=config['baseline_gate'], start=0)
         wfs_sub = (wfs - baseline) * adc2v
+
+        # We pass the full subtracted array; the function handles the slicing
+        is_clean_mask = signal_filter.get_pretrig_mask(
+        wfs_sub, 
+        threshold=pre_trigger_v, 
+        gate=config['pre_trigger_gate'], 
+        start=0
+        )
+
+        # We check the specific channel index in the mask
+        # (Assuming config['channel_idx'] corresponds to the row in wfs)
+        if not is_clean_mask[config['channel_idx']]:
+            continue
 
         # Extract specific channel
         channel_wf = wfs_sub[config['channel_idx']]
