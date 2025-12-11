@@ -209,4 +209,3 @@ __marimo__/
 #Config
 config/*
 !config/config.example.json
-!config/config.json
