@@ -5,14 +5,14 @@ import matplotlib.pyplot as plt
 
 # Use the same path you defined in reader.py
 file_path_source = '/user/sudini/Developer/Data_phaidana/df_1915_pf640_t0_Co60_data.csv'
-file_path_background =  '/user/sudini/Developer/Data_phaidana/df_1916_background_data.csv'
+file_path_background =  '/user/sudini/Developer/Data_phaidana/df_1916_pf640_t0_background_data.csv'
 
 source_df = pd.read_csv(file_path_source)
 background_df = pd.read_csv(file_path_background)
 print(source_df)
 target_channel = 0 
-subset_source = source_df[(source_df['channel'] == target_channel) & (source_df['integral'] > 0) & (source_df['prompt_fraction'] > 0) & (source_df['prompt_fraction'] < 0.5)]
-subset_background = background_df[(background_df['channel'] == target_channel) & (background_df['integral'] > 0) & (background_df['prompt_fraction'] > 0) & (background_df['prompt_fraction'] < 0.5)]
+subset_source = source_df[(source_df['channel'] == target_channel) & (source_df['integral'] > 0) & (source_df['tau2'] > 0.2) & (source_df['tau2_err'] < 3)]
+subset_background = background_df[(background_df['channel'] == target_channel) & (background_df['integral'] > 0)]
 # Check if we actually have data for this channel
 print(f"Plotting {len(subset_source)} pulses for Channel {target_channel}")
 
