@@ -187,7 +187,8 @@ def main(config: dict):
                         row.update({
                             'event_number': event_idx,
                             'channel': config['channel_idx'],
-                            'tau2': expo_vals[1]
+                            'tau2': expo_vals[1],
+                            'tau2_err': errors[1]
                         })
                         pulse_rows.append(row)
 
@@ -217,7 +218,7 @@ def main(config: dict):
         print("Creating DataFrame...")
         pulse_df = pd.DataFrame(pulse_rows)
         
-        priority_cols = ['event_number', 'channel', 'tau2']
+        priority_cols = ['event_number', 'channel', 'tau2', 'tau2_err']
         cols = priority_cols + [c for c in pulse_df.columns if c not in priority_cols]
         pulse_df = pulse_df[cols]
         
