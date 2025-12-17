@@ -19,8 +19,8 @@ class Fit:
         
         # This fit should always have some kind of default values, so if none are specified, generate them
         if p0 is None:
-            guess_a = np.max(x)
-            guess_b = 2
+            guess_a = np.max(y)
+            guess_b = 1.6
             p0 = (guess_a, guess_b)
         
         try:

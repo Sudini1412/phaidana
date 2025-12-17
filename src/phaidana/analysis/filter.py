@@ -62,8 +62,3 @@ class Filter:
         peaks = peaks.flatten()
         return peaks
 
-    def get_baseline(self, wfs, gate=400, start=0):
-        if wfs.ndim > 1: 
-            return np.mean(wfs[:,start:start+gate], axis=1).reshape((-1, 1))
-        return np.mean(wfs[start:start+gate])
-

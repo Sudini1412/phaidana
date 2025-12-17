@@ -2,11 +2,11 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from dataclasses import asdict
-from typing import List, Tuple, Optional
 from tqdm import tqdm
 import json
-import argparse # New import for command line arguments
+import argparse
 import os
+import sys
 
 # Phaidana imports
 import phaidana.parser.pyreader.VX274X_unpacker as unpack
@@ -33,10 +33,12 @@ def visualize_event(time: np.ndarray,
                     fit_engine: Fit,
                     fit_vals: np.ndarray, 
                     event_id: int, 
-                    channel_id: int):
+                    channel_id: int,
+                    fprompt_window: int):
     """
     Plots the raw signal, filtered trace, thresholds, and detected pulses.
     """
+    
     plt.figure(figsize=(10, 5))
     
     # 1. Traces
@@ -53,11 +55,12 @@ def visualize_event(time: np.ndarray,
         t0_idx = min(p.t_start, len(time) - 1)
         t1_idx = min(p.t_end, len(time) - 1)
         pk_idx = min(p.peak_index, len(time) - 1)
-
-        # Highlight area
-        plt.axvspan(time[t0_idx], time[t1_idx], color='green', alpha=0.2)
         
-        # Plot Fit
+        # Highlight area
+        plt.axvspan(time[t0_idx], time[t1_idx], color='green', alpha=0.2, label="ROI integration")
+        plt.axvspan(time[t0_idx], time[t0_idx+fprompt_window], color ='blue', alpha=0.2, label="fprompt integration")
+        
+        # Plot Fit (Only if fit_vals were provided)
         if fit_vals is not None and pk_idx < t1_idx:
             t_slice = time[pk_idx:t1_idx+1]
             if t_slice.size > 0:
@@ -72,7 +75,7 @@ def visualize_event(time: np.ndarray,
     plt.title(f"Event {event_id} | Channel {channel_id} | Found {len(pulses)} pulses")
     plt.xlabel("Time (μs)")
     plt.ylabel("Amplitude (V)")
-    plt.legend(loc='upper right')
+    plt.legend(loc='upper left')
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
@@ -86,15 +89,19 @@ def main(config: dict):
     saturation_v = config['saturation_adc'] * adc2v
     pre_trigger_v = config['pre_trigger_adc'] * adc2v
     
+    # --- Check Fit Configuration ---
+    # Default to True if key is missing to maintain backward compatibility
+    ENABLE_FIT = config['fit_params'].get('enable_fit', True)
+    
     # --- Setup Analyzers ---
     signal_filter = Filter()
     fitter = Fit()
     
     print(f"Loading data from: {config['data_dir']}")
+    print(f"Tau2 Fit Enabled: {ENABLE_FIT}")
     mreader = unpack.MIDASreader(config['data_dir'])
 
     # --- Pulse Finder Configuration ---
-    # We access the nested dictionary 'pulse_finder' from the JSON
     pf_params = config['pulse_finder']
     pf_config = pf.PulseConfig(
         high_threshold=pf_params['high_threshold'], 
@@ -104,7 +111,7 @@ def main(config: dict):
         min_after_peak=pf_params['min_after_peak'],
         valley_depth_threshold=pf_params['valley_depth_threshold'],
         valley_rel_fraction=pf_params['valley_rel_fraction'],
-        fprompt=pf_params['fprompt_window']
+        fprompt=pf_params['fprompt_window']  
     )
     finder = pf.PulseFinder(pf_config)
 
@@ -112,30 +119,34 @@ def main(config: dict):
     events_with_pulses = 0
     time_axis = None 
 
+    max_events = config.get('max_events')
+    if max_events == -1: 
+        max_events = None
+
     print("Starting event loop...")
 
-    for event_idx, event in enumerate(tqdm(mreader)):
+    for event_idx, event in enumerate(tqdm(mreader,total=max_events)):
         if len(event.adc_data) == 0:
             continue
+
+        if max_events is not None and event_idx >= max_events:
+            print(f"\nStop requested: Reached limit of {max_events} events.")
+            break
 
         wfs = event.adc_data
         
         # Baseline subtraction & Calibration
-        #baseline = signal_filter.get_baseline(wfs, gate=config['baseline_gate'], start=0)
-        # This prevents the pulse from influencing the baseline value
         baseline = signal_filter.get_baseline(wfs, gate=config['baseline_gate'], start=0)
         wfs_sub = (wfs - baseline) * adc2v
 
-        # We pass the full subtracted array; the function handles the slicing
+        # Pre-trigger check
         is_clean_mask = signal_filter.get_pretrig_mask(
-        wfs_sub, 
-        threshold=pre_trigger_v, 
-        gate=config['pre_trigger_gate'], 
-        start=0
+            wfs_sub, 
+            threshold=pre_trigger_v, 
+            gate=config['pre_trigger_gate'], 
+            start=0
         )
 
-        # We check the specific channel index in the mask
-        # (Assuming config['channel_idx'] corresponds to the row in wfs)
         if not is_clean_mask[config['channel_idx']]:
             continue
 
@@ -165,19 +176,40 @@ def main(config: dict):
         if len(pulses) == config['n_pulses_req']:
             
             for p in pulses:
+                if p.t_start < config['pre_trigger_gate']:
+                    continue
                 if p.peak_index >= p.t_end: continue
 
                 try:
-                    t_slice = time_axis[p.peak_index : p.t_end]
-                    y_slice = channel_wf[p.peak_index : p.t_end]
+                    # Initialize placeholders for fit results
+                    tau2_val = -1.0
+                    tau2_err = -1.0
+                    fit_vals_for_plot = None
+                    pulse_accepted = False
 
-                    expo_vals, errors = fitter.fit_expo(t_slice, y_slice, p0=(p.peak_amplitude, 1.8))
-                    
-                    # Check Fit Quality using Config params
-                    if (expo_vals is not None and 
-                        expo_vals[1] > config['fit_params']['purity_val'] and 
-                        errors[1] < config['fit_params']['max_fit_error']):
+                    # ---------------- FIT LOGIC ----------------
+                    if ENABLE_FIT:
+                        t_slice = time_axis[p.peak_index : p.t_end]
+                        y_slice = channel_wf[p.peak_index : p.t_end]
                         
+                        expo_vals, errors = fitter.fit_expo(t_slice, y_slice, p0=(p.peak_amplitude, 1.8))
+                        
+                        # Filter by Fit Quality
+                        if (expo_vals is not None and 
+                            expo_vals[1] > config['fit_params']['purity_val'] and 
+                            errors[1] < config['fit_params']['max_fit_error']):
+                            
+                            tau2_val = expo_vals[1]
+                            tau2_err = errors[1]
+                            fit_vals_for_plot = expo_vals
+                            pulse_accepted = True
+                    else:
+                        # Fit Disabled: Accept pulse automatically based on finder
+                        pulse_accepted = True
+                        # tau2 values remain -1.0
+                    # -------------------------------------------
+
+                    if pulse_accepted:
                         events_with_pulses += 1
                         
                         if events_with_pulses % 5000 == 0:
@@ -187,8 +219,8 @@ def main(config: dict):
                         row.update({
                             'event_number': event_idx,
                             'channel': config['channel_idx'],
-                            'tau2': expo_vals[1],
-                            'tau2_err': errors[1]
+                            'tau2': tau2_val,
+                            'tau2_err': tau2_err
                         })
                         pulse_rows.append(row)
 
@@ -201,9 +233,10 @@ def main(config: dict):
                                 pulses=pulses,
                                 pf_config=pf_config,
                                 fit_engine=fitter,
-                                fit_vals=expo_vals,
+                                fit_vals=fit_vals_for_plot,
                                 event_id=event_idx,
-                                channel_id=config['channel_idx']
+                                channel_id=config['channel_idx'],
+                                fprompt_window=pf_params['fprompt_window']
                             )
 
                 except (RuntimeError, ValueError):
@@ -229,38 +262,20 @@ def main(config: dict):
         print("No valid pulses found.")
 
 if __name__ == "__main__":
-    # This block handles the arguments from the terminal
     parser = argparse.ArgumentParser(description="Phaidana Pulse Analysis")
-    
-    # 1. Determine the path dynamically based on where this script file is located
-    # Get the directory of the current script (e.g., .../Project/tests)
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    default_config_path = os.path.abspath(os.path.join(script_dir, "..", "config", "config.json"))
     
-    # Go up one level (".."), then into "config", then "config.json"
-    default_config_path = os.path.join(script_dir, "..", "config", "config.json")
-    
-    # Resolve the ".." so the path looks clean (e.g., .../Project/config/config.json)
-    default_config_path = os.path.abspath(default_config_path)
-    
-    # 2. Add argument for config file
-    parser.add_argument(
-        "-c", "--config", 
-        type=str, 
-        default=default_config_path, 
-        help=f"Path to the JSON configuration file (default: {default_config_path})"
-    )
+    parser.add_argument("-c", "--config", type=str, default=default_config_path, 
+                        help=f"Path to JSON config (default: {default_config_path})")
     
     args = parser.parse_args()
     
-    # 3. Load the config and run main
     try:
-        # Check if file exists before trying to load
         if not os.path.exists(args.config):
              print(f"Error: Config file not found at: {args.config}")
-             print(f"Expected structure: \n  Project/\n    ├── config/\n    │     └── config.json\n    └── tests/\n          └── {os.path.basename(__file__)}")
         else:
             config_data = load_config(args.config)
             main(config_data)
-            
     except Exception as e:
         print(f"Fatal Error: {e}")

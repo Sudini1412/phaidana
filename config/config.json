@@ -6,25 +6,28 @@
     "saturation_adc": 55000,
     "pre_trigger_adc": 200,
     "baseline_gate": 250,
-    "pre_trigger_gate": 250,
+    "pre_trigger_gate": 350,
     "n_pulses_req": 1,
     "n_plots": 5,
-    "data_dir": "/bundle/data/DarkSide/phaidaq/run01915",
-    "output_path": "/user/sudini/Developer/Data_phaidana/df_1915_pf640_t0_Co60_data.csv",
+    "data_dir": "/bundle/data/DarkSide/phaidaq/run01905",
+    "output_path": "/user/sudini/Developer/Data_phaidana/df_1905_12mv_roi350_pf113_t0_background_data.csv",
+    
+    "max_events": 100000,
     
     "pulse_finder": {
         "high_threshold": 0.012,
-        "low_threshold": 0.0,
+        "low_threshold": 0.005,
         "avg_gate": 10,
         "min_gap_samples": 250,
-        "min_after_peak": 250,
+        "min_after_peak": 350,
         "valley_depth_threshold": 0.05,
         "valley_rel_fraction": 0.5,
-        "fprompt_window": 80
+        "fprompt_window": 113
     },
     
     "fit_params": {
+        "enable_fit": true,
         "purity_val": 0.0,
-        "max_fit_error": 3.0
+        "max_fit_error": 5.0
     }
 }

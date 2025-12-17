@@ -1,127 +1,187 @@
-import numpy as np 
-import sys
-import phaidana.parser.pyreader.VX274X_unpacker as unpack
-from scipy.signal import find_peaks
-from phaidana.analysis.filter import Filter
-import phaidana.analysis.pulse_finder as pf
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from dataclasses import asdict
+from pathlib import Path
 
+# Phaidana imports
+import phaidana.parser.pyreader.VX274X_unpacker as unpack
+from phaidana.analysis.filter import Filter
 
-# --- HELPER FUNCTION: PLOTTING ---
-def visualize_event(waveform, filtered_trace, pulses, config, event_id, channel_id, save_path=None):
+# ==========================================
+# 1. CONFIGURATION SECTION
+# ==========================================
+
+DATA_DIR = "/bundle/data/DarkSide/phaidaq/run01915"
+CSV_PATH = "/user/sudini/Developer/Data_phaidana/df_1915_12mv_pf900_t100_Co60_data.csv"
+
+# Signal Processing Constants
+SAMPLING_RATE_HZ = 125_000_000.0  # 125 MHz
+ADC_DYNAMIC_RANGE = 4.0  # Volts
+ADC_RESOLUTION_BITS = 16
+ADC2V = ADC_DYNAMIC_RANGE / (2**ADC_RESOLUTION_BITS)
+
+# --- FILTER SETTINGS ---
+# Syntax: 'Column_Name': (Min_Value, Max_Value)
+# Use None for no limit (e.g., (0.5, None) means > 0.5)
+FILTER_CONFIG = {
+    'channel': 0,                     # Exact match
+    'integral': (20, 90),            # Range: Integration
+    'prompt_fraction': (0.02, 0.1),  # Range: fprompt
+    'tau2': (0.0, None),              # Range: tau2 (must be > 0.4)
+    'tau2_err': (None, 3.0)           # Range: tau2 error (must be < 3.0)
+}
+
+# ==========================================
+# 2. HELPER FUNCTIONS
+# ==========================================
+
+def get_time_axis(num_samples: int, rate_hz: float) -> np.ndarray:
+    """Generates a time axis in microseconds."""
+    return (np.arange(num_samples, dtype=float) / rate_hz) * 1e6
+
+def plot_waveform(time_axis, waveform, event_id, integral, fprompt):
     """
-    Plots the raw signal, filtered trace, thresholds, and detected pulses.
+    Plots the waveform with event info in the title.
     """
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(10, 5))
+    plt.plot(time_axis, waveform, linewidth=0.8, color='k')
     
-    # 1. Plot Traces
-    plt.plot(waveform, color='k', alpha=0.5, label='Raw Signal')
-    plt.plot(filtered_trace, color='blue', linewidth=1.0, label='Filtered Trace')
-    
-    # 2. Plot Thresholds
-    plt.axhline(config.high_threshold, color='red', linestyle='--', alpha=0.5, label=f'High Thresh ({config.high_threshold})')
-    plt.axhline(config.low_threshold, color='orange', linestyle='--', alpha=0.5, label=f'Low Thresh ({config.low_threshold})')
-
-    # 3. Highlight Pulses
-    for i, p in enumerate(pulses):
-        # Highlight the duration of the pulse
-        plt.axvspan(p.t_start, p.t_end, color='green', alpha=0.2)
-        
-        # Mark the peak
-        # Note: We access the amplitude from the waveform using the index
-        peak_amp = waveform[p.peak_index] 
-        plt.plot(p.peak_index, peak_amp, "rx", markersize=10)
-        plt.text(p.peak_index, peak_amp, f"P{i+1}", 
-                 ha='center', va='bottom', color='black', fontweight='bold')
-
-    # 4. Labels and Styling
-    plt.title(f"Event {event_id} | Channel {channel_id} | Found {len(pulses)} pulses")
-    plt.xlabel("Time (Samples)")
-    plt.ylabel("Amplitude (ADC)")
-    plt.legend(loc='upper right')
+    # Title now shows the specific parameters for this event
+    plt.title(f'Event {event_id} | Int: {integral:.1f} | fprompt: {fprompt:.3f}')
+    plt.xlabel('Time ($\mu$s)')
+    plt.ylabel('Amplitude (V)')
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
+    plt.show()
 
-    if save_path:
-        plt.savefig(save_path)
-        plt.close() # Close memory to prevent leaks
-    else:
+def apply_custom_filters(df, filters):
+    """
+    Generic function to filter a dataframe based on config dictionary.
+    """
+    df_filtered = df.copy()
+    print(f"--- Filtering Data ({len(df)} initial events) ---")
+    
+    for col, condition in filters.items():
+        if col not in df_filtered.columns:
+            print(f"Warning: Column '{col}' not found in dataframe. Skipping.")
+            continue
+            
+        # Case 1: Range Filter (tuple/list)
+        if isinstance(condition, (tuple, list)) and len(condition) == 2:
+            min_val, max_val = condition
+            if min_val is not None:
+                df_filtered = df_filtered[df_filtered[col] >= min_val]
+            if max_val is not None:
+                df_filtered = df_filtered[df_filtered[col] <= max_val]
+            print(f"  Filter {col}: {condition} -> {len(df_filtered)} events left")
+
+        # Case 2: Exact Match (single value)
+        else:
+            df_filtered = df_filtered[df_filtered[col] == condition]
+            print(f"  Filter {col} == {condition} -> {len(df_filtered)} events left")
+            
+    return df_filtered
+
+def load_and_filter_data(csv_path, filters):
+    """Loads CSV and returns filtered DataFrame."""
+    print(f"Loading data from: {csv_path}")
+    df = pd.read_csv(csv_path)
+    
+    # Apply filters
+    filtered_df = apply_custom_filters(df, filters)
+    
+    # Optional: Plot distributions of the remaining data to confirm filters work
+    if not filtered_df.empty:
+        plt.figure(figsize=(12, 4))
+        
+        # Plot Integral
+        plt.subplot(1, 3, 1)
+        plt.hist(filtered_df['integral'], bins=50, color='skyblue', histtype='stepfilled')
+        plt.title('Filtered Integral')
+        
+        # Plot Prompt Fraction (if exists)
+        if 'prompt_fraction' in filtered_df.columns:
+            plt.subplot(1, 3, 2)
+            plt.hist(filtered_df['prompt_fraction'], bins=50, color='salmon', histtype='stepfilled')
+            plt.title('Filtered fprompt')
+            
+        # Plot Tau2 (if exists)
+        if 'tau2' in filtered_df.columns:
+            plt.subplot(1, 3, 3)
+            plt.hist(filtered_df['tau2'], bins=50, color='lightgreen', histtype='stepfilled')
+            plt.title('Filtered Tau2')
+            
+        plt.tight_layout()
         plt.show()
 
+    return filtered_df
 
-# --- MAIN SCRIPT --- #
-filter = Filter()
-dir = "/bundle/data/DarkSide/phaidaq/run01915"
-file_path_source = '/user/sudini/Developer/Data_phaidana/df_1915_t0_Co60_data.csv'
+# ==========================================
+# 3. MAIN EXECUTION
+# ==========================================
 
-source_df = pd.read_csv(file_path_source)
-target_channel = 0 
-subset_source = source_df[source_df['channel'] == target_channel]
-
-plt.hist(subset_source['tau2'].to_numpy(),bins=200, range=(0,3))
-plt.show()
-# Define the range of integrals you are interested in (e.g., based on the plot)
-min_integral = 40 
-max_integral = 120
-min_fprompt = 0.06
-max_fprompt = 0.14
-# Apply the filter
-# We use & for "AND", and enclose conditions in parentheses ()
-events_in_range = subset_source[
-    (subset_source['integral'] >= min_integral) & 
-    (subset_source['integral'] <= max_integral) &
-    (subset_source['prompt_fraction'] <= min_fprompt) &
-    (subset_source['prompt_fraction'] <= max_fprompt)
-]
-
-print(f"\n--- Analysis for Integral range [{min_integral}, {max_integral}] ---")
-print(f"Found {len(events_in_range)} events.")
-
-if not events_in_range.empty:
-    print("Event Numbers:")
-    # .unique() ensures we don't double count if an event has multiple pulses in that range
-    # (though your logic earlier seemed to only save single-pulse events)
-    print(events_in_range['event_number'].unique())
-    print(events_in_range['tau2'].to_numpy())
-    plt.hist(events_in_range['tau2'].to_numpy(), bins=200, range=(0,3))
-    plt.show()
+def main():
+    # 1. Load and Filter CSV Data
+    filtered_df = load_and_filter_data(CSV_PATH, FILTER_CONFIG)
     
-    # Optional: Print full details of the first 5 matches
+    if filtered_df.empty:
+        print("No events found matching criteria. Exiting.")
+        return
+
+    # Create a lookup dictionary: event_number -> {integral, prompt_fraction, etc}
+    # This allows us to access the event properties quickly inside the loop
+    target_event_map = filtered_df.set_index('event_number')[['integral', 'prompt_fraction']].to_dict('index')
+    
     print("\nFirst 5 matching rows:")
-    print(events_in_range.head(5))
+    print(filtered_df.head(5))
 
-    count = 0
-    pulse_rows = []
-    mreader= unpack.MIDASreader(dir)
-    main_events = events_in_range['event_number'].unique()
-
-
+    # 2. Setup Data Reader
+    print(f"\nInitializing Reader for directory: {DATA_DIR}")
+    mreader = unpack.MIDASreader(DATA_DIR)
+    signal_filter = Filter()
+    
+    # 3. Process Events
     print("Starting event loop...")
-    for i,event in enumerate(mreader):
-        nevent = i
-        ch_idx = 0
+    
+    time_axis = None
+    target_channel = FILTER_CONFIG.get('channel', 0)
+    
+    # Iterate through MIDAS file
+    for i, event in enumerate(mreader):
         
-        event_channels = event.nchannels
-        # print(f'Event # {i}\t#Modules {event.nboards}\t#Channels {event.nchannels}\t#Samples {event.nsamples}')
-        # print(f'\tchannel mask {bin(event.channel_mask)[2:]}\ttrigger time: {event.trigger_time}')
-        # access waveforms in event
-        wfs = event.adc_data # shape = (number of channels, number of waveform sample)
-        bal = filter.get_baseline(wfs, gate=250, start=0) 
-        wfs_sub = wfs - bal
-        bal_rms = np.sqrt(np.mean(bal**2))
-        bal_std = np.std(bal)
-        
-        np.set_printoptions(threshold=sys.maxsize)
-        
-        if nevent == 389458:
-            print(wfs_sub[ch_idx])
-            plt.plot(wfs_sub[ch_idx])
-            plt.title(f'Plotting event {event}')
-            plt.show()
+        # SKIP if this event index is not in our filtered list
+        if i not in target_event_map:
+            continue
 
-        # if nevent in main_events:
-        #     plt.plot(wfs_sub[ch_idx])
-        #     plt.title(f'Plotting event {nevent}')
-        #     plt.show()
+        if len(event.adc_data) == 0:
+            continue
+
+        # Extract Waveforms (shape: n_channels, n_samples)
+        wfs = event.adc_data 
+        
+        # Calculate Baseline
+        baseline = signal_filter.get_baseline(wfs, gate=250, start=0) 
+        
+        # Subtract Baseline and Convert to Volts
+        wfs_sub = (wfs - baseline) * ADC2V
+
+        # Get specific channel waveform
+        current_wf = wfs_sub[target_channel] 
+        
+        if time_axis is None or len(time_axis) != len(current_wf):
+            time_axis = get_time_axis(len(current_wf), SAMPLING_RATE_HZ)
+
+        # Retrieve metadata for the plot title from our lookup map
+        event_meta = target_event_map[i]
+        
+        print(f"Plotting Event {i}: Int={event_meta['integral']:.1f}, PF={event_meta['prompt_fraction']:.2f}")
+        plot_waveform(
+            time_axis, 
+            current_wf, 
+            i, 
+            event_meta['integral'], 
+            event_meta['prompt_fraction']
+        )
+
+if __name__ == "__main__":
+    main()

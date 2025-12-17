@@ -85,7 +85,11 @@ class PulseCandidate:
         else:
             peak_amp = np.max(segment)
             integral = np.sum(segment)
-            prompt_fraction = float(np.sum(segment[:fprompt]))/float(integral)
+            if integral == 0:
+                print("------------ZERO")
+                prompt_fraction =0
+            else:
+                prompt_fraction = float(np.sum(segment[:fprompt]))/float(integral)
 
         return PulseResult(
             t_start=safe_start,
@@ -189,10 +193,15 @@ class PulseFinder:
 
             if state == State.STANDBY:
                 if val > self.cfg.high_threshold:
-                    # 1. Check previous pulse constraint
+                    # Check previous pulse constraint
                     last_end = pulses[-1].t_end if pulses else -999
+
+                    #If we are currently inside the forbidden gap, IGNORE this trigger completely
+                    if i < (last_end + self.cfg.min_gap_samples):
+                        i += 1
+                        continue  # Skip to next sample
                     
-                    # 2. Find start time
+                    #Find start time
                     t0 = self._find_pulse_start(wf_raw, i, last_end)
                     
                     if t0 < n:
